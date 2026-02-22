@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的太空位置 (已修复旋转与月相)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Arial', sans-serif; }
+        #canvas-container { width: 100%; height: 100vh; display: block; }
+        
+        /* UI 覆盖层 */
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            pointer-events: none;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        #status-message {
+            font-size: 1.2em;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        /* 右下角的月相视图 */
+        #moon-inset-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #moon-inset-container h3 { margin: 0 0 10px 0; font-size: 1em; font-weight: normal; color: #aaa; }
+        
+        /* 新增：Canvas 样式 */
+        #moon-phase-canvas {
+            margin: 0 auto 10px auto;
+            display: block;
+            border-radius: 50%;
+            box-shadow: 0 0 15px rgba(255,255,255,0.15);
+        }
+
+        #moon-phase-text { font-weight: bold; font-size: 1.1em; }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-overlay">
+        <div id="status-message">正在等待位置权限...请在提示时允许。</div>
+    </div>
+
+    <div id="moon-inset-container">
+        <h3>你眼中的月亮 (真实光影模拟)</h3>
+        <canvas id="moon-phase-canvas" width="80" height="80"></canvas>
+        <div id="moon-phase-text">计算中...</div>
+    </div>
+
+    <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+
+    <script>
+        let scene, camera, renderer, controls;
+        let earthMesh, cloudsMesh, moonMesh, userMarkerMesh;
+        let sunLight;
+        const EARTH_RADIUS = 5;
+        const MOON_RADIUS = 1.35;
+        const MOON_DISTANCE = 30;
+
+        const statusDiv = document.getElementById('status-message');
+        const moonPhaseTextDiv = document.getElementById('moon-phase-text');
+
+        // 1. 初始化 3D 场景
+        function initScene() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 25); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 7;
+            controls.maxDistance = 100;
+
+            const ambientLight = new THREE.AmbientLight(0x333333);
+            scene.add(ambientLight);
+
+            sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            sunLight.position.set(1, 0, 0); 
+            sunLight.castShadow = true;
+            scene.add(sunLight);
+
+            createStars();
+            createEarthAndMoon();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        // 创建星空
+        function createStars() {
+            const starGeometry = new THREE.BufferGeometry();
+            const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05 });
+            const starVertices = [];
+            for (let i = 0; i < 5000; i++) {
+                const x = (Math.random() - 0.5) * 200;
+                const y = (Math.random() - 0.5) * 200;
+                const z = (Math.random() - 0.5) * 200;
+                starVertices.push(x, y, z);
+            }
+            starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+            const stars = new THREE.Points(starGeometry, starMaterial);
+            scene.add(stars);
+        }
+
+        // 创建地球、云层和月球
+        function createEarthAndMoon() {
+            const loader = new THREE.TextureLoader();
+
+            // 地球
+            const earthGeometry = new THREE.SphereGeometry(EARTH_RADIUS, 64, 64);
+            const earthMaterial = new THREE.MeshPhongMaterial({
+                map: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg'),
+                bumpMap: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_normal_2048.jpg'),
+                bumpScale: 0.05,
+                specularMap: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_specular_2048.jpg'),
+                specular: new THREE.Color('grey')
+            });
+            earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
+            earthMesh.rotation.z = 23.5 * Math.PI / 180; // 地轴倾角
+            scene.add(earthMesh);
+
+            // 云层
+            const cloudGeometry = new THREE.SphereGeometry(EARTH_RADIUS + 0.03, 64, 64);
+            const cloudMaterial = new THREE.MeshPhongMaterial({
+                map: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_clouds_1024.png'),
+                transparent: true,
+                opacity: 0.4
+            });
+            cloudsMesh = new THREE.Mesh(cloudGeometry, cloudMaterial);
+            earthMesh.add(cloudsMesh); 
+
+            // 月球
+            const moonGeometry = new THREE.SphereGeometry(MOON_RADIUS, 32, 32);
+            const moonMaterial = new THREE.MeshPhongMaterial({
+                map: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'),
+                bumpMap: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_normal_1024.jpg'),
+                bumpScale: 0.02
+            });
+            moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
+            moonMesh.position.set(MOON_DISTANCE, 0, 0);
+            scene.add(moonMesh);
+        }
+
+        // 2. 获取位置
+        function getUserLocation() {
+            if (!navigator.geolocation) {
+                statusDiv.textContent = "您的浏览器不支持地理位置功能。";
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    statusDiv.textContent = `已定位：纬度 ${lat.toFixed(2)}, 经度 ${lon.toFixed(2)}`;
+                    updateWorldBasedOnLocation(lat, lon);
+                },
+                (error) => {
+                    let msg = "无法获取位置。";
+                    if (error.code === 1) msg = "您拒绝了位置请求。正在显示默认视角。";
+                    statusDiv.textContent = msg;
+                    updateWorldBasedOnLocation(0, 0, true);
+                },
+                { enableHighAccuracy: true }
+            );
+        }
+
+        // 3. 核心计算与更新
+        function updateWorldBasedOnLocation(lat, lon, isDefault = false) {
+            const now = new Date();
+
+            // A. 添加用户标记
+            if (!isDefault) {
+                addUserMarker(lat, lon);
+            }
+
+            // B. 太阳位置与光照
+            const sunPos = SunCalc.getPosition(now, lat, lon);
+            const phi = Math.PI / 2 - sunPos.altitude;
+            const theta = sunPos.azimuth;
+            sunLight.position.setFromSphericalCoords(50, phi, theta).normalize();
+
+            // C. 计算并绘制真实的 2D 月相
+            const moonIllumination = SunCalc.getMoonIllumination(now);
+            const phase = moonIllumination.phase; 
+            const fraction = moonIllumination.fraction; 
+
+            let phaseName = "";
+            if (phase < 0.05) phaseName = "新月";
+            else if (phase < 0.2) phaseName = "蛾眉月";
+            else if (phase < 0.3) phaseName = "上弦月";
+            else if (phase < 0.45) phaseName = "盈凸月";
+            else if (phase < 0.55) phaseName = "满月";
+            else if (phase < 0.7) phaseName = "亏凸月";
+            else if (phase < 0.8) phaseName = "下弦月";
+            else phaseName = "残月";
+            
+            moonPhaseTextDiv.textContent = `${phaseName} (${(fraction * 100).toFixed(0)}%)`;
+            
+            // 调用新的 Canvas 绘制函数
+            drawRealisticMoonPhase(phase);
+        }
+
+        // 新增：使用 Canvas 绘制真实的球面阴影弧度
+        function drawRealisticMoonPhase(phase) {
+            const canvas = document.getElementById('moon-phase-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const r = 40; // 画布中心点兼半径
+
+            ctx.clearRect(0, 0, 80, 80);
+
+            // 1. 画暗色背景圆
+            ctx.beginPath();
+            ctx.arc(r, r, r, 0, Math.PI * 2);
+            ctx.fillStyle = '#111';
+            ctx.fill();
+
+            // 2. 绘制亮部逻辑
+            if (phase > 0 && phase < 1) {
+                ctx.fillStyle = '#eee';
+                
+                // 画左半边或右半边的基础亮色半圆
+                ctx.beginPath();
+                const startAngle = phase <= 0.5 ? -Math.PI/2 : Math.PI/2;
+                const endAngle = phase <= 0.5 ? Math.PI/2 : -Math.PI/2;
+                ctx.arc(r, r, r, startAngle, endAngle);
+                ctx.fill();
+
+                // 画中间的动态椭圆，模拟晨昏线
+                ctx.beginPath();
+                // 数学魔法：将 0-1 的相位转换为椭圆的缩放比例
+                let scale = Math.abs(Math.cos(phase * Math.PI * 2)); 
+                ctx.ellipse(r, r, r * scale, r, 0, 0, Math.PI * 2);
+                
+                // 判断中间的椭圆是用来“遮挡”(暗) 还是用来“照亮”(亮)
+                if (phase < 0.25 || phase > 0.75) {
+                    ctx.fillStyle = '#111'; // 暗椭圆
+                } else {
+                    ctx.fillStyle = '#eee'; // 亮椭圆
+                }
+                ctx.fill();
+            }
+        }
+
+        // 经纬度转 3D 坐标
+        function latLonToVector3(lat, lon, radius) {
+            const phi = (90 - lat) * (Math.PI / 180);
+            const theta = (lon + 180) * (Math.PI / 180);
+            const x = -(radius * Math.sin(phi) * Math.cos(theta));
+            const z = radius * Math.sin(phi) * Math.sin(theta);
+            const y = radius * Math.cos(phi);
+            return new THREE.Vector3(x, y, z);
+        }
+
+        // 修复：将标记添加到 earthMesh 内部，使其随地球自转
+        function addUserMarker(lat, lon) {
+            if (userMarkerMesh) earthMesh.remove(userMarkerMesh);
+
+            const pinGeometry = new THREE.CylinderGeometry(0.05, 0.01, 1, 16);
+            const pinMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            userMarkerMesh = new THREE.Mesh(pinGeometry, pinMaterial);
+
+            // 使用相对于地球中心的坐标
+            const pos = latLonToVector3(lat, lon, EARTH_RADIUS + 0.5); 
+            userMarkerMesh.position.copy(pos);
+
+            userMarkerMesh.lookAt(new THREE.Vector3(0,0,0));
+            userMarkerMesh.rotateX(Math.PI / 2); 
+
+            // 【关键修复】添加到 earthMesh，让红点成为地球的子节点
+            earthMesh.add(userMarkerMesh);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // 4. 动画循环
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 【自转】现在地球自转时，作为子节点的红点(userMarkerMesh)也会跟着转了！
+            if (earthMesh) earthMesh.rotation.y += 0.0005;
+            if (cloudsMesh) cloudsMesh.rotation.y += 0.0002; // 云层相对地球稍微滑动
+
+            if (moonMesh) {
+                const time = Date.now() * 0.0001; 
+                moonMesh.position.x = Math.cos(time) * MOON_DISTANCE;
+                moonMesh.position.z = Math.sin(time) * MOON_DISTANCE;
+                moonMesh.rotation.y -= 0.001; 
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // 启动！
+        initScene();
+        getUserLocation(); 
+        animate();
+
+    </script>
+</body>
+</html>
