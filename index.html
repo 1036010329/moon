@@ -209,7 +209,7 @@
             moonPivot.add(moonMesh); 
         }
 
-        // --- 核心修复：严密的贴图与经纬度对齐算法 ---
+        // --- 终极修正：严密的贴图与经纬度对齐算法 ---
         function getUserLocation() {
             if (!navigator.geolocation) { statusDiv.innerHTML = "❌ 浏览器不支持定位。"; return; }
             navigator.geolocation.getCurrentPosition(
@@ -220,16 +220,20 @@
                     const pinMat = new THREE.MeshBasicMaterial({ color: 0xff3333 });
                     userMarkerMesh = new THREE.Mesh(pinGeo, pinMat);
                     
-                    // 修正：适配 Three.js 球体 UV 映射标准 (0度经线在-Z，向西为+X)
+                    // 【核心修复】精确适配 Three.js 的 SphereGeometry UV 映射规则
+                    // 确保 lon=0 (格林威治) 准确落在局部坐标系的 +X 轴，lon=90 (东经) 落在 -Z 轴
                     const phi = (90 - lat) * (Math.PI / 180);
-                    const theta = -lon * (Math.PI / 180); 
+                    const theta = lon * (Math.PI / 180); 
                     const r = EARTH_RADIUS + 0.4;
+                    
                     userMarkerMesh.position.set(
-                        r * Math.sin(phi) * Math.sin(theta), 
+                        r * Math.sin(phi) * Math.cos(theta), 
                         r * Math.cos(phi), 
-                        -r * Math.sin(phi) * Math.cos(theta)
+                        -r * Math.sin(phi) * Math.sin(theta)
                     );
-                    userMarkerMesh.lookAt(0,0,0); userMarkerMesh.rotateX(Math.PI / 2); 
+                    
+                    userMarkerMesh.lookAt(0,0,0); 
+                    userMarkerMesh.rotateX(Math.PI / 2); 
                     earthMesh.add(userMarkerMesh); 
                 },
                 (err) => { statusDiv.innerHTML = "⚠️ 定位失败或被拒绝。"; }
@@ -277,10 +281,11 @@
             const date = new Date(simTime);
             timeDisplay.textContent = date.toLocaleString('zh-CN', { hour12: false }) + " UTC" + (date.getTimezoneOffset()/-60);
 
-            // --- 核心修复：基于格林威治恒星时的完美地球自转 ---
-            // 当 UTC 为中午12点时，地球转动 3π/2 确保本初子午线直面太阳(+X方向)
+            // 【核心修复】基于格林威治时间的完美地球自转
+            // 当 UTC 时间为 12:00 时，格林威治(局部+X)必须直面太阳(世界+X)。
+            // 地球自西向东转，所以时间每过一小时，按比例增加旋转角度
             const hours = date.getUTCHours() + date.getUTCMinutes()/60 + date.getUTCSeconds()/3600;
-            earthMesh.rotation.y = (Math.PI / 2) + (hours / 24) * (Math.PI * 2);
+            earthMesh.rotation.y = ((hours - 12) / 24) * (Math.PI * 2);
             
             if(cloudsMesh) cloudsMesh.rotation.y = earthMesh.rotation.y + (simTime * 0.00000001);
 
