@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>真实时空: 电影级光影地月系统</title>
+    <title>Luna</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
         #canvas-container { width: 100%; height: 100vh; display: block; }
@@ -17,20 +17,22 @@
         #moon-phase-text { font-weight: bold; font-size: 1.2em; margin-bottom: 5px; }
         #moon-tilt-text { font-size: 0.8em; color: #aaa; }
 
-        #control-panel { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(10, 15, 30, 0.8); padding: 15px 25px; border-radius: 30px; color: white; border: 1px solid rgba(255, 255, 255, 0.15); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; gap: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); pointer-events: auto; }
-        .btn-group { display: flex; gap: 10px; }
+        #control-panel { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(10, 15, 30, 0.8); padding: 15px 25px; border-radius: 20px; color: white; border: 1px solid rgba(255, 255, 255, 0.15); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; gap: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); pointer-events: auto; min-width: 320px;}
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
         button { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 8px 15px; border-radius: 20px; cursor: pointer; transition: all 0.3s; font-size: 0.9em; }
         button:hover { background: rgba(255,255,255,0.25); border-color: white; }
-        button.active { background: #4CAF50; border-color: #4CAF50; }
-        .slider-container { display: flex; align-items: center; gap: 15px; font-size: 0.9em; }
-        input[type=range] { width: 150px; cursor: pointer; }
-        #sim-time-display { font-family: monospace; font-size: 1.1em; color: #e8eaed; margin-top: 5px; }
+        button.active { background: #4CAF50; border-color: #4CAF50; box-shadow: 0 0 10px rgba(76, 175, 80, 0.5); }
+        .mode-btn { background: rgba(138, 180, 248, 0.2); border-color: rgba(138, 180, 248, 0.4); }
+        .mode-btn.active { background: #8ab4f8; color: #000; border-color: #8ab4f8; box-shadow: 0 0 10px rgba(138, 180, 248, 0.6); }
+        .slider-container { display: flex; align-items: center; gap: 15px; font-size: 0.9em; width: 100%; justify-content: center;}
+        input[type=range] { width: 180px; cursor: pointer; }
+        #sim-time-display { font-family: monospace; font-size: 1.1em; color: #e8eaed; margin-top: 5px; text-align: center;}
     </style>
 </head>
 <body>
 
     <div id="canvas-container"></div>
-    <div id="ui-overlay"><div id="status-message">🌍 正在加载高精度模型与着色器...</div></div>
+    <div id="ui-overlay"><div id="status-message">🌍 正在同步空间坐标系...</div></div>
     
     <div id="control-panel">
         <div id="sim-time-display">加载中...</div>
@@ -43,6 +45,10 @@
             <button id="btn-earth" class="active" onclick="setTarget('earth')">🎯 锁定地球</button>
             <button id="btn-moon" onclick="setTarget('moon')">🎯 追踪月球</button>
             <button onclick="resetTime()">⏱️ 回到此刻</button>
+        </div>
+        <div class="btn-group" style="margin-top: 2px;">
+            <button id="btn-visual" class="mode-btn active" onclick="setDisplayMode('visual')">✨ 观赏模式</button>
+            <button id="btn-real" class="mode-btn" onclick="setDisplayMode('real')">📏 真实比例</button>
         </div>
     </div>
 
@@ -62,15 +68,18 @@
         let earthMesh, cloudsMesh, atmosphereMesh, moonMesh, userMarkerMesh, sunMesh;
         let earthGroup, moonPivot; 
         
+        // 物理常量 (基准)
         const EARTH_RADIUS = 5; 
-        const MOON_RADIUS = EARTH_RADIUS * 0.2724; 
-        const MOON_DISTANCE = EARTH_RADIUS * 60.33; 
-        const SUN_DISTANCE = 2000; // 太阳的相对位置
+        const REAL_MOON_RADIUS = EARTH_RADIUS * 0.2724; 
+        const REAL_MOON_DISTANCE = EARTH_RADIUS * 60.33; 
+        const SUN_DISTANCE = 2000; 
 
+        // 状态变量
         let simTime = Date.now(); 
         let timeMultiplier = 1;   
         const clock = new THREE.Clock();
         let cameraTarget = 'earth'; 
+        let displayMode = 'visual'; // 默认开启观赏模式
 
         const statusDiv = document.getElementById('status-message');
         const timeDisplay = document.getElementById('sim-time-display');
@@ -84,11 +93,9 @@
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 10000);
             camera.position.set(0, 20, 80); 
 
-            // 开启高精度物理渲染
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
-            // 启用真实的色调映射，让高光不过曝，暗部保留细节
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
             renderer.toneMappingExposure = 1.2;
             document.getElementById('canvas-container').appendChild(renderer.domElement);
@@ -97,12 +104,9 @@
             controls.enableDamping = true; controls.dampingFactor = 0.05;
             controls.minDistance = 6; controls.maxDistance = 3000;
 
-            // --- 全新计算的光影系统 ---
-            // 1. 半球光 (HemisphereLight)：上方微微透蓝（模拟宇宙散射），下方深蓝，提亮地球阴影和深海颜色
             const hemiLight = new THREE.HemisphereLight(0xffffff, 0x001133, 0.3);
             scene.add(hemiLight);
 
-            // 2. 太阳平行光：极度明亮的主光源
             const sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
             sunLight.position.set(SUN_DISTANCE, 0, 0); 
             scene.add(sunLight);
@@ -110,6 +114,7 @@
             createSkybox();
             createSun();
             createPlanets();
+            setDisplayMode('visual'); // 初始化应用观赏模式
 
             window.addEventListener('resize', onWindowResize);
 
@@ -128,30 +133,25 @@
             const skyGeometry = new THREE.SphereGeometry(4000, 64, 64);
             const skyMaterial = new THREE.MeshBasicMaterial({
                 map: textureLoader.load('https://unpkg.com/three-globe/example/img/night-sky.png'),
-                side: THREE.BackSide,
-                color: 0xaaaaaa // 稍微提亮银河系背景
+                side: THREE.BackSide, color: 0xaaaaaa 
             });
             scene.add(new THREE.Mesh(skyGeometry, skyMaterial));
         }
 
-        // --- 新增：实体化太阳与光学计算光晕 ---
         function createSun() {
             const loader = new THREE.TextureLoader();
-            
-            // 太阳本体（一个极亮的纯白/微黄球体）
             const sunGeo = new THREE.SphereGeometry(EARTH_RADIUS * 8, 32, 32);
-            const sunMat = new THREE.MeshBasicMaterial({ color: 0xfffbea }); // 暖白色
+            const sunMat = new THREE.MeshBasicMaterial({ color: 0xfffbea }); 
             sunMesh = new THREE.Mesh(sunGeo, sunMat);
             sunMesh.position.set(SUN_DISTANCE, 0, 0);
             scene.add(sunMesh);
 
-            // 太阳光晕 (使用 Sprite 和加色混合计算)
             const glowMat = new THREE.SpriteMaterial({
                 map: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/lensflare/lensflare0.png'),
                 color: 0xffffee, transparent: true, blending: THREE.AdditiveBlending, opacity: 0.8
             });
             const sunGlow = new THREE.Sprite(glowMat);
-            sunGlow.scale.set(1000, 1000, 1); // 放大光晕覆盖太阳
+            sunGlow.scale.set(1000, 1000, 1); 
             sunMesh.add(sunGlow);
         }
 
@@ -162,50 +162,28 @@
             earthGroup.rotation.z = 23.5 * Math.PI / 180;
             scene.add(earthGroup);
 
-            // --- 升级 1：PBR 材质，更清透的海水与陆地 ---
             const earthGeo = new THREE.SphereGeometry(EARTH_RADIUS, 128, 128);
             const earthMat = new THREE.MeshStandardMaterial({
                 map: loader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
                 bumpMap: loader.load('https://unpkg.com/three-globe/example/img/earth-topology.png'),
                 bumpScale: 0.1,
                 roughnessMap: loader.load('https://unpkg.com/three-globe/example/img/earth-water.png'),
-                roughness: 0.6, // 控制陆地不反光
-                metalness: 0.1, // 海水微量金属质感产生耀眼高光
-                color: new THREE.Color(0xeeeeff) // 【核心调整】给材质整体叠加淡淡的亮蓝色，让海水更浅更美
+                roughness: 0.6, metalness: 0.1, color: new THREE.Color(0xeeeeff) 
             });
             earthMesh = new THREE.Mesh(earthGeo, earthMat);
             earthGroup.add(earthMesh); 
 
-            // --- 升级 2：纯计算的大气层着色器 (GLSL) ---
-            // 这里的数学原理是：越靠近球体边缘的位置，法线向量与视线向量越垂直，透明度和蓝色就越强
-            const atmosVertexShader = `
-                varying vec3 vNormal;
-                void main() {
-                    vNormal = normalize(normalMatrix * normal);
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                }
-            `;
-            const atmosFragmentShader = `
-                varying vec3 vNormal;
-                void main() {
-                    // Fresnel 方程计算边缘发光强度
-                    float intensity = pow(0.65 - dot(vNormal, vec3(0, 0, 1.0)), 4.0);
-                    // 叠加一种空灵的青蓝色 (R, G, B, Alpha)
-                    gl_FragColor = vec4(0.3, 0.6, 1.0, 1.0) * intensity;
-                }
-            `;
-            const atmosGeo = new THREE.SphereGeometry(EARTH_RADIUS * 1.02, 64, 64); // 比地球稍微大一点点
+            // 大气层
+            const atmosGeo = new THREE.SphereGeometry(EARTH_RADIUS * 1.02, 64, 64); 
             const atmosMat = new THREE.ShaderMaterial({
-                vertexShader: atmosVertexShader,
-                fragmentShader: atmosFragmentShader,
-                blending: THREE.AdditiveBlending, // 加色混合，越叠加越亮
-                side: THREE.BackSide,             // 渲染背面产生包围感
-                transparent: true
+                vertexShader: `varying vec3 vNormal; void main() { vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+                fragmentShader: `varying vec3 vNormal; void main() { float intensity = pow(0.65 - dot(vNormal, vec3(0, 0, 1.0)), 4.0); gl_FragColor = vec4(0.3, 0.6, 1.0, 1.0) * intensity; }`,
+                blending: THREE.AdditiveBlending, side: THREE.BackSide, transparent: true
             });
             atmosphereMesh = new THREE.Mesh(atmosGeo, atmosMat);
             earthGroup.add(atmosphereMesh);
 
-            // 云层 (稍微提亮)
+            // 云层
             const cloudGeo = new THREE.SphereGeometry(EARTH_RADIUS + 0.035, 64, 64);
             const cloudMat = new THREE.MeshStandardMaterial({
                 map: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_clouds_1024.png'),
@@ -214,45 +192,66 @@
             cloudsMesh = new THREE.Mesh(cloudGeo, cloudMat);
             earthMesh.add(cloudsMesh); 
 
-            // 月球 (使用物理材质并提亮)
+            // 月球系统
             moonPivot = new THREE.Group();
             moonPivot.rotation.z = 5.14 * Math.PI / 180;
             scene.add(moonPivot);
 
-            const moonGeo = new THREE.SphereGeometry(MOON_RADIUS, 64, 64);
+            const moonGeo = new THREE.SphereGeometry(REAL_MOON_RADIUS, 64, 64);
             const moonMat = new THREE.MeshStandardMaterial({
                 map: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'),
                 bumpMap: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_normal_1024.jpg'),
-                bumpScale: 0.05,
-                color: new THREE.Color(0xdddddd), // 提亮月球表面
-                roughness: 0.9 // 月球表面非常粗糙，漫反射强
+                bumpScale: 0.05, color: new THREE.Color(0xdddddd), roughness: 0.9 
             });
             moonMesh = new THREE.Mesh(moonGeo, moonMat);
-            moonMesh.position.set(MOON_DISTANCE, 0, 0);
             moonMesh.lookAt(0,0,0);
             moonMesh.rotation.y += Math.PI / 2; 
             moonPivot.add(moonMesh); 
         }
 
-        // 定位代码不变
+        // --- 核心修复：严密的贴图与经纬度对齐算法 ---
         function getUserLocation() {
             if (!navigator.geolocation) { statusDiv.innerHTML = "❌ 浏览器不支持定位。"; return; }
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
                     const lat = pos.coords.latitude; const lon = pos.coords.longitude;
-                    statusDiv.innerHTML = `📍 坐标锁定：纬度 ${lat.toFixed(2)}, 经度 ${lon.toFixed(2)}`;
+                    statusDiv.innerHTML = `📍 坐标：纬度 ${lat.toFixed(2)}, 经度 ${lon.toFixed(2)}`;
                     const pinGeo = new THREE.CylinderGeometry(0.04, 0.01, 0.8, 16);
                     const pinMat = new THREE.MeshBasicMaterial({ color: 0xff3333 });
                     userMarkerMesh = new THREE.Mesh(pinGeo, pinMat);
+                    
+                    // 修正：适配 Three.js 球体 UV 映射标准 (0度经线在-Z，向西为+X)
                     const phi = (90 - lat) * (Math.PI / 180);
-                    const theta = (lon + 180) * (Math.PI / 180);
+                    const theta = -lon * (Math.PI / 180); 
                     const r = EARTH_RADIUS + 0.4;
-                    userMarkerMesh.position.set(-(r * Math.sin(phi) * Math.cos(theta)), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
+                    userMarkerMesh.position.set(
+                        r * Math.sin(phi) * Math.sin(theta), 
+                        r * Math.cos(phi), 
+                        -r * Math.sin(phi) * Math.cos(theta)
+                    );
                     userMarkerMesh.lookAt(0,0,0); userMarkerMesh.rotateX(Math.PI / 2); 
                     earthMesh.add(userMarkerMesh); 
                 },
                 (err) => { statusDiv.innerHTML = "⚠️ 定位失败或被拒绝。"; }
             );
+        }
+
+        // --- 新增：显示模式切换逻辑 ---
+        function setDisplayMode(mode) {
+            displayMode = mode;
+            document.getElementById('btn-visual').className = 'mode-btn ' + (mode === 'visual' ? 'active' : '');
+            document.getElementById('btn-real').className = 'mode-btn ' + (mode === 'real' ? 'active' : '');
+
+            if (mode === 'real') {
+                moonMesh.scale.set(1, 1, 1); // 真实大小
+                moonMesh.position.set(REAL_MOON_DISTANCE, 0, 0); // 真实距离
+            } else {
+                moonMesh.scale.set(3.5, 3.5, 3.5); // 放大 3.5 倍以便观赏
+                moonMesh.position.set(EARTH_RADIUS * 12, 0, 0);  // 拉近到 12 倍地球半径
+            }
+            
+            // 切换模式时自动重置视角到适合的距离
+            if (cameraTarget === 'moon') setTarget('moon');
         }
 
         function resetTime() { simTime = Date.now(); timeSlider.value = 0; timeMultiplier = 1; speedDisplay.textContent = "1x"; }
@@ -263,7 +262,9 @@
             btnMoon.className = target === 'moon' ? 'active' : '';
             if(target === 'moon') {
                 const moonPos = new THREE.Vector3(); moonMesh.getWorldPosition(moonPos);
-                const offset = moonPos.clone().normalize().multiplyScalar(MOON_RADIUS * 15);
+                // 根据不同模式计算适当的相机偏移量
+                const scaleMulti = displayMode === 'real' ? 1 : 3.5;
+                const offset = moonPos.clone().normalize().multiplyScalar(REAL_MOON_RADIUS * scaleMulti * 6);
                 camera.position.copy(moonPos).add(offset);
             } else {
                 camera.position.set(0, 20, 80);
@@ -276,8 +277,11 @@
             const date = new Date(simTime);
             timeDisplay.textContent = date.toLocaleString('zh-CN', { hour12: false }) + " UTC" + (date.getTimezoneOffset()/-60);
 
+            // --- 核心修复：基于格林威治恒星时的完美地球自转 ---
+            // 当 UTC 为中午12点时，地球转动 3π/2 确保本初子午线直面太阳(+X方向)
             const hours = date.getUTCHours() + date.getUTCMinutes()/60 + date.getUTCSeconds()/3600;
-            earthMesh.rotation.y = Math.PI - ((hours / 24) * Math.PI * 2);
+            earthMesh.rotation.y = (Math.PI / 2) + (hours / 24) * (Math.PI * 2);
+            
             if(cloudsMesh) cloudsMesh.rotation.y = earthMesh.rotation.y + (simTime * 0.00000001);
 
             const moonIllum = SunCalc.getMoonIllumination(date);
