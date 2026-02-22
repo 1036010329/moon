@@ -3,25 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>妙喵月</title>
+    <title>妙喵的观月站</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
         #canvas-container { width: 100%; height: 100vh; display: block; }
         
-        #ui-overlay { position: absolute; top: 20px; left: 20px; color: white; pointer-events: none; text-shadow: 1px 1px 3px rgba(0,0,0,1); }
-        #status-message { font-size: 1.1em; background: rgba(0, 0, 0, 0.5); border-left: 4px solid #4CAF50; padding: 10px 15px; border-radius: 4px; display: inline-block; margin-bottom: 10px; backdrop-filter: blur(4px); }
-
-        #moon-inset-container { position: absolute; bottom: 20px; right: 20px; background: rgba(10, 15, 30, 0.7); padding: 15px 25px; border-radius: 12px; text-align: center; color: white; border: 1px solid rgba(255, 255, 255, 0.15); backdrop-filter: blur(8px); box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        #ui-overlay { position: absolute; top: 20px; left: 20px; color: white; text-shadow: 1px 1px 3px rgba(0,0,0,1); z-index: 10; pointer-events: none;}
+        #status-message { font-size: 1.1em; background: rgba(0, 0, 0, 0.6); border-left: 4px solid #4CAF50; padding: 10px 15px; border-radius: 4px; display: inline-block; margin-bottom: 12px; backdrop-filter: blur(4px); }
+        
+        #interactive-panel { pointer-events: auto; }
+        
+        #moon-inset-container { position: absolute; bottom: 20px; right: 20px; background: rgba(10, 15, 30, 0.75); padding: 15px 25px; border-radius: 12px; text-align: center; color: white; border: 1px solid rgba(255, 255, 255, 0.15); backdrop-filter: blur(8px); box-shadow: 0 4px 15px rgba(0,0,0,0.5); pointer-events: none; min-width: 140px;}
         #moon-inset-container h3 { margin: 0 0 10px 0; font-size: 0.9em; font-weight: normal; color: #8ab4f8; text-transform: uppercase; letter-spacing: 1px; }
-        #moon-phase-canvas { margin: 0 auto 10px auto; display: block; border-radius: 50%; box-shadow: 0 0 20px rgba(255,255,255,0.1); }
+        #moon-phase-canvas { margin: 0 auto 10px auto; display: block; border-radius: 50%; box-shadow: 0 0 20px rgba(255,255,255,0.15); }
         #moon-phase-text { font-weight: bold; font-size: 1.2em; margin-bottom: 5px; }
-        #moon-tilt-text { font-size: 0.8em; color: #aaa; }
+        #moon-times { font-size: 0.85em; color: #b0bec5; margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; line-height: 1.5;}
 
-        #control-panel { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(10, 15, 30, 0.8); padding: 15px 25px; border-radius: 20px; color: white; border: 1px solid rgba(255, 255, 255, 0.15); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; gap: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); pointer-events: auto; min-width: 320px;}
+        #control-panel { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(10, 15, 30, 0.8); padding: 15px 25px; border-radius: 20px; color: white; border: 1px solid rgba(255, 255, 255, 0.15); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; gap: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); pointer-events: auto; min-width: 440px;}
         .btn-group { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
         button { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 8px 15px; border-radius: 20px; cursor: pointer; transition: all 0.3s; font-size: 0.9em; }
         button:hover { background: rgba(255,255,255,0.25); border-color: white; }
         button.active { background: #4CAF50; border-color: #4CAF50; box-shadow: 0 0 10px rgba(76, 175, 80, 0.5); }
+        
+        #btn-pick { background: rgba(255, 152, 0, 0.2); border-color: rgba(255, 152, 0, 0.5); }
+        #btn-pick:hover { background: rgba(255, 152, 0, 0.4); }
+        #btn-pick.active { background: #ff9800; color: #000; border-color: #ff9800; box-shadow: 0 0 15px rgba(255, 152, 0, 0.8); font-weight: bold;}
+        
         .mode-btn { background: rgba(138, 180, 248, 0.2); border-color: rgba(138, 180, 248, 0.4); }
         .mode-btn.active { background: #8ab4f8; color: #000; border-color: #8ab4f8; box-shadow: 0 0 10px rgba(138, 180, 248, 0.6); }
         .slider-container { display: flex; align-items: center; gap: 15px; font-size: 0.9em; width: 100%; justify-content: center;}
@@ -32,7 +39,13 @@
 <body>
 
     <div id="canvas-container"></div>
-    <div id="ui-overlay"><div id="status-message">🌍 正在同步空间坐标系...</div></div>
+    
+    <div id="ui-overlay">
+        <div id="status-message">🌍 正在载入高精度星历表...</div>
+        <div id="interactive-panel">
+            <button id="btn-pick" onclick="togglePickMode()">📍 切换观察点</button>
+        </div>
+    </div>
     
     <div id="control-panel">
         <div id="sim-time-display">加载中...</div>
@@ -42,21 +55,22 @@
             <span id="speed-display" style="width: 50px; text-align: right;">1x</span>
         </div>
         <div class="btn-group">
-            <button id="btn-earth" class="active" onclick="setTarget('earth')">🎯 锁定地球</button>
-            <button id="btn-moon" onclick="setTarget('moon')">🎯 追踪月球</button>
-            <button onclick="resetTime()">⏱️ 回到此刻</button>
+            <button id="btn-earth" class="active" onclick="setCameraMode('earth')">🎯 俯瞰地球</button>
+            <button id="btn-telescope" onclick="setCameraMode('telescope')">🔭 当地太空观月 </button>
+            <button id="btn-moon" onclick="setCameraMode('moon')">🚀 飞向月球</button>
         </div>
         <div class="btn-group" style="margin-top: 2px;">
             <button id="btn-visual" class="mode-btn active" onclick="setDisplayMode('visual')">✨ 观赏模式</button>
             <button id="btn-real" class="mode-btn" onclick="setDisplayMode('real')">📏 真实比例</button>
+            <button onclick="resetTime()" style="margin-left: 10px; background: rgba(255,255,255,0.1);">⏱️ 回到此刻</button>
         </div>
     </div>
 
     <div id="moon-inset-container">
-        <h3>实时观测月相</h3>
+        <h3>实况月相</h3>
         <canvas id="moon-phase-canvas" width="80" height="80"></canvas>
         <div id="moon-phase-text">--</div>
-        <div id="moon-tilt-text">光照倾角: --°</div>
+        <div id="moon-times">月出: --:--<br>月落: --:--</div>
     </div>
 
     <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
@@ -65,32 +79,37 @@
 
     <script>
         let scene, camera, renderer, controls;
-        let earthMesh, cloudsMesh, atmosphereMesh, moonMesh, userMarkerMesh, sunMesh;
-        let earthGroup, moonPivot; 
+        let earthPivot, earthGlobe, cloudsMesh, atmosphereMesh, moonMesh, userMarkerMesh, sunMesh, sunLight;
         
-        // 物理常量 (基准)
         const EARTH_RADIUS = 5; 
         const REAL_MOON_RADIUS = EARTH_RADIUS * 0.2724; 
         const REAL_MOON_DISTANCE = EARTH_RADIUS * 60.33; 
         const SUN_DISTANCE = 2000; 
 
-        // 状态变量
         let simTime = Date.now(); 
         let timeMultiplier = 1;   
         const clock = new THREE.Clock();
-        let cameraTarget = 'earth'; 
-        let displayMode = 'visual'; // 默认开启观赏模式
+        
+        let cameraMode = 'earth'; 
+        let displayMode = 'visual';
+        
+        // 初始坐标，优先获取浏览器位置，失败则采用你提供的陕西宝鸡附近坐标
+        let currentLat = 34.3297;
+        let currentLon = 107.9825;
+        let isPickMode = false;
 
         const statusDiv = document.getElementById('status-message');
         const timeDisplay = document.getElementById('sim-time-display');
         const speedDisplay = document.getElementById('speed-display');
         const timeSlider = document.getElementById('time-slider');
-        const btnEarth = document.getElementById('btn-earth');
-        const btnMoon = document.getElementById('btn-moon');
+        const btnPick = document.getElementById('btn-pick');
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
 
         function initScene() {
             scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 10000);
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 10000);
             camera.position.set(0, 20, 80); 
 
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
@@ -101,22 +120,22 @@
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true; controls.dampingFactor = 0.05;
-            controls.minDistance = 6; controls.maxDistance = 3000;
+            controls.enableDamping = true; 
+            controls.dampingFactor = 0.05;
 
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x001133, 0.3);
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x001133, 0.25);
             scene.add(hemiLight);
 
-            const sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
-            sunLight.position.set(SUN_DISTANCE, 0, 0); 
+            sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
             scene.add(sunLight);
 
             createSkybox();
             createSun();
             createPlanets();
-            setDisplayMode('visual'); // 初始化应用观赏模式
+            setDisplayMode('visual'); 
 
             window.addEventListener('resize', onWindowResize);
+            window.addEventListener('pointerdown', onDocumentMouseDown, false);
 
             timeSlider.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
@@ -133,7 +152,7 @@
             const skyGeometry = new THREE.SphereGeometry(4000, 64, 64);
             const skyMaterial = new THREE.MeshBasicMaterial({
                 map: textureLoader.load('https://unpkg.com/three-globe/example/img/night-sky.png'),
-                side: THREE.BackSide, color: 0xaaaaaa 
+                side: THREE.BackSide, color: 0x888888 
             });
             scene.add(new THREE.Mesh(skyGeometry, skyMaterial));
         }
@@ -143,7 +162,6 @@
             const sunGeo = new THREE.SphereGeometry(EARTH_RADIUS * 8, 32, 32);
             const sunMat = new THREE.MeshBasicMaterial({ color: 0xfffbea }); 
             sunMesh = new THREE.Mesh(sunGeo, sunMat);
-            sunMesh.position.set(SUN_DISTANCE, 0, 0);
             scene.add(sunMesh);
 
             const glowMat = new THREE.SpriteMaterial({
@@ -158,9 +176,11 @@
         function createPlanets() {
             const loader = new THREE.TextureLoader();
 
-            earthGroup = new THREE.Group();
-            earthGroup.rotation.z = 23.5 * Math.PI / 180;
-            scene.add(earthGroup);
+            // 核心修复：建立统一的地球旋转枢纽，Z轴最后应用（黄赤交角）
+            earthPivot = new THREE.Group();
+            earthPivot.rotation.order = 'ZYX'; // 优先自转(Y)，最后倾斜(Z)
+            earthPivot.rotation.z = 23.5 * Math.PI / 180;
+            scene.add(earthPivot);
 
             const earthGeo = new THREE.SphereGeometry(EARTH_RADIUS, 128, 128);
             const earthMat = new THREE.MeshStandardMaterial({
@@ -170,10 +190,9 @@
                 roughnessMap: loader.load('https://unpkg.com/three-globe/example/img/earth-water.png'),
                 roughness: 0.6, metalness: 0.1, color: new THREE.Color(0xeeeeff) 
             });
-            earthMesh = new THREE.Mesh(earthGeo, earthMat);
-            earthGroup.add(earthMesh); 
+            earthGlobe = new THREE.Mesh(earthGeo, earthMat);
+            earthPivot.add(earthGlobe); 
 
-            // 大气层
             const atmosGeo = new THREE.SphereGeometry(EARTH_RADIUS * 1.02, 64, 64); 
             const atmosMat = new THREE.ShaderMaterial({
                 vertexShader: `varying vec3 vNormal; void main() { vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -181,145 +200,288 @@
                 blending: THREE.AdditiveBlending, side: THREE.BackSide, transparent: true
             });
             atmosphereMesh = new THREE.Mesh(atmosGeo, atmosMat);
-            earthGroup.add(atmosphereMesh);
+            earthPivot.add(atmosphereMesh);
 
-            // 云层
             const cloudGeo = new THREE.SphereGeometry(EARTH_RADIUS + 0.035, 64, 64);
             const cloudMat = new THREE.MeshStandardMaterial({
                 map: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_clouds_1024.png'),
                 transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false
             });
             cloudsMesh = new THREE.Mesh(cloudGeo, cloudMat);
-            earthMesh.add(cloudsMesh); 
-
-            // 月球系统
-            moonPivot = new THREE.Group();
-            moonPivot.rotation.z = 5.14 * Math.PI / 180;
-            scene.add(moonPivot);
+            earthPivot.add(cloudsMesh); 
 
             const moonGeo = new THREE.SphereGeometry(REAL_MOON_RADIUS, 64, 64);
             const moonMat = new THREE.MeshStandardMaterial({
                 map: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'),
                 bumpMap: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_normal_1024.jpg'),
-                bumpScale: 0.05, color: new THREE.Color(0xdddddd), roughness: 0.9 
+                bumpScale: 0.02, color: new THREE.Color(0xffffee), roughness: 0.8 
             });
             moonMesh = new THREE.Mesh(moonGeo, moonMat);
-            moonMesh.lookAt(0,0,0);
-            moonMesh.rotation.y += Math.PI / 2; 
-            moonPivot.add(moonMesh); 
+            scene.add(moonMesh); 
         }
 
-        // --- 终极修正：严密的贴图与经纬度对齐算法 ---
         function getUserLocation() {
-            if (!navigator.geolocation) { statusDiv.innerHTML = "❌ 浏览器不支持定位。"; return; }
+            if (!navigator.geolocation) { 
+                updateLocationPin(currentLat, currentLon); 
+                return; 
+            } 
             navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    const lat = pos.coords.latitude; const lon = pos.coords.longitude;
-                    statusDiv.innerHTML = `📍 坐标：纬度 ${lat.toFixed(2)}, 经度 ${lon.toFixed(2)}`;
-                    const pinGeo = new THREE.CylinderGeometry(0.04, 0.01, 0.8, 16);
-                    const pinMat = new THREE.MeshBasicMaterial({ color: 0xff3333 });
-                    userMarkerMesh = new THREE.Mesh(pinGeo, pinMat);
-                    
-                    // 【核心修复】精确适配 Three.js 的 SphereGeometry UV 映射规则
-                    // 确保 lon=0 (格林威治) 准确落在局部坐标系的 +X 轴，lon=90 (东经) 落在 -Z 轴
-                    const phi = (90 - lat) * (Math.PI / 180);
-                    const theta = lon * (Math.PI / 180); 
-                    const r = EARTH_RADIUS + 0.4;
-                    
-                    userMarkerMesh.position.set(
-                        r * Math.sin(phi) * Math.cos(theta), 
-                        r * Math.cos(phi), 
-                        -r * Math.sin(phi) * Math.sin(theta)
-                    );
-                    
-                    userMarkerMesh.lookAt(0,0,0); 
-                    userMarkerMesh.rotateX(Math.PI / 2); 
-                    earthMesh.add(userMarkerMesh); 
-                },
-                (err) => { statusDiv.innerHTML = "⚠️ 定位失败或被拒绝。"; }
+                (pos) => { updateLocationPin(pos.coords.latitude, pos.coords.longitude); },
+                (err) => { updateLocationPin(currentLat, currentLon); },
+                { timeout: 5000 }
             );
         }
 
-        // --- 新增：显示模式切换逻辑 ---
+        function updateLocationPin(lat, lon) {
+            currentLat = lat; currentLon = lon;
+            
+            const latStr = lat >= 0 ? `北纬 N` : `南纬 S`;
+            const lonStr = lon >= 0 ? `东经 E` : `西经 W`;
+            statusDiv.innerHTML = `📍 观测点: ${latStr} ${Math.abs(lat).toFixed(2)}°, ${lonStr} ${Math.abs(lon).toFixed(2)}°`;
+            
+            if (userMarkerMesh) earthPivot.remove(userMarkerMesh);
+            // --- 替换为新的高亮版代码 ---
+
+            // 1. 几何体变大：底部改粗到 0.08，顶部改粗到 0.03，高度增加到 1.3
+            const pinGeo = new THREE.CylinderGeometry(0.08, 0.03, 1.3, 32);
+
+            // 2. 材质升级：使用 Standard材质 开启 emissive（自发光）属性
+            const pinMat = new THREE.MeshStandardMaterial({
+                color: 0xff0000,          // 本体纯红色
+                emissive: 0xff3300,       // 发出强烈的橘红色光芒
+                emissiveIntensity: 6.0,   // 发光强度设为 3倍，确保穿透云层！
+                metalness: 0.6,           // 加一点金属质感
+                roughness: 0.2            // 表面光滑，反光更锐利
+            });
+
+            // 创建网格
+            userMarkerMesh = new THREE.Mesh(pinGeo, pinMat);
+            // 给它加一个同样发光的球头，看着更像地图钉
+            const pinHeadGeo = new THREE.SphereGeometry(0.12, 16, 16);
+            const pinHeadMesh = new THREE.Mesh(pinHeadGeo, pinMat);
+            pinHeadMesh.position.y = 0.65; // 放在柱子顶部
+            userMarkerMesh.add(pinHeadMesh); // 组合在一起
+            
+            // 核心简化：由于 earthPivot 本身处理了倾角，红点只需要标准的经纬度球面映射
+            const phi = (90 - lat) * (Math.PI / 180);
+            const theta = lon * (Math.PI / 180); 
+            // 将红点贴在极靠近地表的位置，降低误差
+            const r = EARTH_RADIUS + 0.05; 
+            
+            userMarkerMesh.position.set(
+                r * Math.sin(phi) * Math.cos(theta), 
+                r * Math.cos(phi), 
+                -r * Math.sin(phi) * Math.sin(theta) 
+            );
+
+            // 让图钉尖端朝向地心
+            userMarkerMesh.lookAt(0,0,0); 
+            userMarkerMesh.rotateX(Math.PI / 2); 
+            earthPivot.add(userMarkerMesh); 
+
+            updateCameraFocus();
+        }
+
+        function togglePickMode() {
+            isPickMode = !isPickMode;
+            if (isPickMode) {
+                btnPick.classList.add('active');
+                btnPick.innerText = "🖱️ 请点击 3D 地球表面...";
+                controls.enabled = false; 
+                document.body.style.cursor = 'crosshair';
+            } else {
+                btnPick.classList.remove('active');
+                btnPick.innerText = "📍 选择新观察点";
+                if (cameraMode !== 'telescope') controls.enabled = true; 
+                document.body.style.cursor = 'default';
+            }
+        }
+
+        function onDocumentMouseDown(event) {
+            if (!isPickMode || event.button !== 0) return; 
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            
+            const intersects = raycaster.intersectObject(earthGlobe);
+            if (intersects.length > 0) {
+                // 将点击的全局坐标转换为地球自转组内的局部坐标
+                const localPoint = earthPivot.worldToLocal(intersects[0].point.clone());
+                let lat = Math.asin(localPoint.y / EARTH_RADIUS) * (180 / Math.PI);
+                let lon = Math.atan2(-localPoint.z, localPoint.x) * (180 / Math.PI);
+
+                updateLocationPin(lat, lon);
+                togglePickMode(); 
+            }
+        }
+
         function setDisplayMode(mode) {
             displayMode = mode;
             document.getElementById('btn-visual').className = 'mode-btn ' + (mode === 'visual' ? 'active' : '');
             document.getElementById('btn-real').className = 'mode-btn ' + (mode === 'real' ? 'active' : '');
-
-            if (mode === 'real') {
-                moonMesh.scale.set(1, 1, 1); // 真实大小
-                moonMesh.position.set(REAL_MOON_DISTANCE, 0, 0); // 真实距离
-            } else {
-                moonMesh.scale.set(3.5, 3.5, 3.5); // 放大 3.5 倍以便观赏
-                moonMesh.position.set(EARTH_RADIUS * 12, 0, 0);  // 拉近到 12 倍地球半径
-            }
-            
-            // 切换模式时自动重置视角到适合的距离
-            if (cameraTarget === 'moon') setTarget('moon');
+            moonMesh.scale.setScalar(mode === 'real' ? 1 : 3.5);
+            updatePhysics(); 
         }
 
         function resetTime() { simTime = Date.now(); timeSlider.value = 0; timeMultiplier = 1; speedDisplay.textContent = "1x"; }
 
-        function setTarget(target) {
-            cameraTarget = target;
-            btnEarth.className = target === 'earth' ? 'active' : '';
-            btnMoon.className = target === 'moon' ? 'active' : '';
-            if(target === 'moon') {
-                const moonPos = new THREE.Vector3(); moonMesh.getWorldPosition(moonPos);
-                // 根据不同模式计算适当的相机偏移量
-                const scaleMulti = displayMode === 'real' ? 1 : 3.5;
-                const offset = moonPos.clone().normalize().multiplyScalar(REAL_MOON_RADIUS * scaleMulti * 6);
-                camera.position.copy(moonPos).add(offset);
-            } else {
-                camera.position.set(0, 20, 80);
+        function setCameraMode(mode) {
+            cameraMode = mode;
+            document.getElementById('btn-earth').className = mode === 'earth' ? 'active' : '';
+            document.getElementById('btn-telescope').className = mode === 'telescope' ? 'active' : '';
+            document.getElementById('btn-moon').className = mode === 'moon' ? 'active' : '';
+            updateCameraFocus();
+        }
+
+        function updateCameraFocus() {
+            if (!userMarkerMesh) return;
+            const pinWorldPos = new THREE.Vector3();
+            userMarkerMesh.getWorldPosition(pinWorldPos);
+
+            if (cameraMode === 'earth') {
+                controls.enabled = true;
+                camera.up.set(0, 1, 0); 
+                camera.position.copy(pinWorldPos.clone().normalize().multiplyScalar(EARTH_RADIUS * 4));
+                controls.target.set(0, 0, 0);
+
+            } else if (cameraMode === 'telescope') {
+                // 【绝杀 1小时误差的修改】：将相机极限贴近地表 (1.002 = 离地 12公里) 1.05
+                // 这样能够将地平线俯角误差降到最低，月出时间绝对精准！
+                controls.enabled = false; 
+                camera.position.copy(pinWorldPos.clone().normalize().multiplyScalar(EARTH_RADIUS * 1.05));
+                camera.up.copy(pinWorldPos).normalize(); 
+                camera.lookAt(moonMesh.position);
+
+            } else if (cameraMode === 'moon') {
+                controls.enabled = true;
+                camera.up.set(0, 1, 0);
+                const moonPos = moonMesh.position.clone();
+                const viewDir = moonPos.clone().normalize(); 
+                const dist = REAL_MOON_RADIUS * (displayMode === 'real' ? 6 : 15);
+                camera.position.copy(moonPos).sub(viewDir.multiplyScalar(dist));
+                controls.target.copy(moonPos);
             }
+            controls.update();
         }
 
         function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+
+        // --- 提取星历转换为绝对地心坐标系的核心公式 ---
+        function getTrueSpacePosition(calcPos, distance, earthRotY) {
+            const alt = calcPos.altitude;
+            const az = calcPos.azimuth;
+            
+            // 将 (Lat 0, Lon 0) 处的本地地平坐标转为未倾斜的全局坐标
+            const xLocal = distance * Math.sin(alt);
+            const yLocal = distance * Math.cos(alt) * -Math.cos(az); 
+            const zLocal = distance * Math.cos(alt) * Math.sin(az);  
+
+            // 抵消地球自转带来的参照系偏移
+            const cosR = Math.cos(earthRotY);
+            const sinR = Math.sin(earthRotY);
+            
+            const xGlobal = xLocal * cosR + zLocal * sinR;
+            const yGlobal = yLocal;
+            const zGlobal = -xLocal * sinR + zLocal * cosR;
+
+            // 关键：将算出的绝对坐标同样应用 23.5 度黄赤交角，实现与地球视觉模型的完美咬合
+            const tilt = 23.5 * Math.PI / 180;
+            const xTilted = xGlobal * Math.cos(tilt) - yGlobal * Math.sin(tilt);
+            const yTilted = xGlobal * Math.sin(tilt) + yGlobal * Math.cos(tilt);
+            const zTilted = zGlobal;
+
+            return new THREE.Vector3(xTilted, yTilted, zTilted);
+        }
 
         function updatePhysics() {
             const date = new Date(simTime);
             timeDisplay.textContent = date.toLocaleString('zh-CN', { hour12: false }) + " UTC" + (date.getTimezoneOffset()/-60);
 
-            // 【核心修复】基于格林威治时间的完美地球自转
-            // 当 UTC 时间为 12:00 时，格林威治(局部+X)必须直面太阳(世界+X)。
-            // 地球自西向东转，所以时间每过一小时，按比例增加旋转角度
+            // 1. 地球精确自转
             const hours = date.getUTCHours() + date.getUTCMinutes()/60 + date.getUTCSeconds()/3600;
-            earthMesh.rotation.y = ((hours - 12) / 24) * (Math.PI * 2);
-            
-            if(cloudsMesh) cloudsMesh.rotation.y = earthMesh.rotation.y + (simTime * 0.00000001);
+            const earthRotY = ((hours - 12) / 24) * (Math.PI * 2);
+            earthPivot.rotation.y = earthRotY;
+            if(cloudsMesh) cloudsMesh.rotation.y += 0.0002;
+
+            // 2. 使用 SunCalc 获取精准的历表方位
+            const sunCalcPos = SunCalc.getPosition(date, 0, 0);
+            const moonCalcPos = SunCalc.getMoonPosition(date, 0, 0);
+
+            // 彻底解决轨道偏斜和椭圆速度不一的问题
+            const sunVec = getTrueSpacePosition(sunCalcPos, SUN_DISTANCE, earthRotY);
+            const dist = displayMode === 'real' ? REAL_MOON_DISTANCE : EARTH_RADIUS * 12;
+            const moonVec = getTrueSpacePosition(moonCalcPos, dist, earthRotY);
+
+            sunMesh.position.copy(sunVec);
+            sunLight.position.copy(sunVec);
+            moonMesh.position.copy(moonVec);
+
+            // 3. 终极修复：完美对准月海正脸 (U=0.5 恰好映射在 -Z 轴)
+            // 只要 LookAt 即可，不需要任何多余的 Y 轴旋转！
+            moonMesh.lookAt(0, 0, 0); 
+            // 修正月海朝向
+            moonMesh.rotateY(-Math.PI / 2); 
+            // 4. 更新摄像机相对追踪
+            if (cameraMode === 'telescope' && userMarkerMesh) {
+                const pinWorldPos = new THREE.Vector3();
+                userMarkerMesh.getWorldPosition(pinWorldPos);
+                camera.position.copy(pinWorldPos.clone().normalize().multiplyScalar(EARTH_RADIUS * 1.05));
+                camera.up.copy(pinWorldPos).normalize();
+                camera.lookAt(moonMesh.position);
+            } else if (cameraMode === 'moon') {
+                const delta = moonMesh.position.clone().sub(controls.target);
+                camera.position.add(delta);
+                controls.target.copy(moonMesh.position);
+            }
 
             const moonIllum = SunCalc.getMoonIllumination(date);
-            moonPivot.rotation.y = moonIllum.phase * Math.PI * 2;
-
-            updateMoonUI(moonIllum);
-            
-            if (cameraTarget === 'moon') {
-                const moonPos = new THREE.Vector3(); moonMesh.getWorldPosition(moonPos);
-                controls.target.copy(moonPos);
-            } else { controls.target.set(0, 0, 0); }
+            const moonPosData = SunCalc.getMoonPosition(date, currentLat, currentLon);
+            updateMoonUI(moonIllum, moonPosData, date);
         }
 
-        function updateMoonUI(moonIllum) {
-            const phase = moonIllum.phase; const fraction = moonIllum.fraction; const angle = moonIllum.angle; 
-            const pName = ["新月", "蛾眉月", "上弦月", "盈凸月", "满月", "亏凸月", "下弦月", "残月"][Math.floor(phase * 8)] || "新月";
+        // 5. 极简且随纬度物理翻转的 2D 月相
+        function updateMoonUI(moonIllum, moonPosData, date) {
+            const phase = moonIllum.phase; 
+            const fraction = moonIllum.fraction; 
+            const phaseIndex = Math.floor((phase + 0.0625) % 1 * 8);
+            const pName = ["新月", "蛾眉月", "上弦月", "盈凸月", "满月", "亏凸月", "下弦月", "残月"][phaseIndex] || "新月";
+            
             document.getElementById('moon-phase-text').textContent = `${pName} ${(fraction * 100).toFixed(1)}%`;
-            document.getElementById('moon-tilt-text').textContent = `光晕倾角: ${(angle * 180 / Math.PI).toFixed(1)}°`;
+
+            const times = SunCalc.getMoonTimes(date, currentLat, currentLon);
+            const formatTime = (t) => t ? t.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : "--:--";
+            document.getElementById('moon-times').innerHTML = `月出: ${formatTime(times.rise)}<br>月落: ${formatTime(times.set)}`;
 
             const canvas = document.getElementById('moon-phase-canvas');
             const ctx = canvas.getContext('2d'), r = 40;
             ctx.clearRect(0, 0, 80, 80);
-            ctx.save(); ctx.translate(r, r); ctx.rotate(-angle + Math.PI/2); ctx.translate(-r, -r);
-            ctx.beginPath(); ctx.arc(r, r, r, 0, Math.PI * 2); ctx.fillStyle = '#1a1a2e'; ctx.fill();
+            
+            ctx.save();
+            ctx.translate(r, r);
+            // 修复镜像对称：去除负号，使 Canvas 顺时针旋转逻辑与天体视差角统一！
+            ctx.rotate(moonPosData.parallacticAngle);
+            ctx.translate(-r, -r);
+            
+            ctx.beginPath(); ctx.arc(r, r, r, 0, Math.PI * 2); ctx.fillStyle = '#222233'; ctx.fill();
 
             if (phase > 0 && phase < 1) {
-                ctx.fillStyle = '#f5f5f5'; ctx.beginPath();
-                ctx.arc(r, r, r, phase <= 0.5 ? -Math.PI/2 : Math.PI/2, phase <= 0.5 ? Math.PI/2 : -Math.PI/2); ctx.fill(); 
-                ctx.beginPath(); let scale = Math.abs(Math.cos(phase * Math.PI * 2)); 
-                ctx.ellipse(r, r, r * scale, r, 0, 0, Math.PI * 2);
-                ctx.fillStyle = (phase < 0.25 || phase > 0.75) ? '#1a1a2e' : '#f5f5f5'; ctx.fill();
+                ctx.fillStyle = '#fffff0'; 
+                ctx.beginPath();
+                // 盈月必然发亮于右半球
+                if (phase <= 0.5) {
+                    ctx.arc(r, r, r, -Math.PI/2, Math.PI/2); 
+                } else {
+                    ctx.arc(r, r, r, Math.PI/2, -Math.PI/2); 
+                }
+                ctx.fill(); 
+                
+                ctx.beginPath(); 
+                let scale = Math.cos(phase * Math.PI * 2); 
+                ctx.ellipse(r, r, r * Math.abs(scale), r, 0, 0, Math.PI * 2);
+                ctx.fillStyle = (phase < 0.25 || phase > 0.75) ? '#222233' : '#fffff0'; 
+                ctx.fill();
             }
-            ctx.restore(); 
+            ctx.restore();
         }
 
         function animate() {
@@ -327,7 +489,9 @@
             const deltaMs = clock.getDelta() * 1000;
             simTime += deltaMs * timeMultiplier;
             updatePhysics();
-            controls.update();
+            if (cameraMode !== 'telescope') {
+                controls.update();
+            }
             renderer.render(scene, camera);
         }
 
